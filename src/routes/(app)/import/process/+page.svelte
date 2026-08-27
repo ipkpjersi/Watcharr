@@ -932,7 +932,7 @@
 						importMultiItem = undefined;
 					}}
 				>
-					None of these, stop asking about it
+					None of these
 				</button>
 			</div>
 		</Modal>
