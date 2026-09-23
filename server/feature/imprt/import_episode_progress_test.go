@@ -11,10 +11,10 @@ import (
 	"github.com/sbondCo/Watcharr/util"
 )
 
-// TestSpreadEpisodeCountOverSeasons covers turning an absolute watched count
-// into the episodes it actually covers, which is all a MyAnimeList export
-// gives us to go on.
-func TestSpreadEpisodeCountOverSeasons(t *testing.T) {
+// TestEpisodesForCount covers turning a watched count into the episodes it
+// covers, which is all a MyAnimeList export gives us to go on. A MyAnimeList
+// entry is a single season, so the count never leaves the first season.
+func TestEpisodesForCount(t *testing.T) {
 	tests := []struct {
 		name    string
 		seasons []seasonEpisodeCount
@@ -22,30 +22,37 @@ func TestSpreadEpisodeCountOverSeasons(t *testing.T) {
 		want    []episodeRef
 	}{
 		{
-			name:    "part of a single season",
+			name:    "part of a season",
 			seasons: []seasonEpisodeCount{{Number: 1, EpisodeCount: 12}},
 			count:   3,
-			want: []episodeRef{
-				{1, 1}, {1, 2}, {1, 3},
-			},
+			want:    []episodeRef{{1, 1}, {1, 2}, {1, 3}},
 		},
 		{
-			name:    "a whole single season",
+			name:    "a whole season",
 			seasons: []seasonEpisodeCount{{Number: 1, EpisodeCount: 3}},
 			count:   3,
-			want: []episodeRef{
-				{1, 1}, {1, 2}, {1, 3},
-			},
+			want:    []episodeRef{{1, 1}, {1, 2}, {1, 3}},
 		},
 		{
-			name: "spills over into the next season",
+			name: "never carries over into the next season",
 			seasons: []seasonEpisodeCount{
 				{Number: 1, EpisodeCount: 2},
 				{Number: 2, EpisodeCount: 4},
 			},
 			count: 4,
+			want:  []episodeRef{{1, 1}, {1, 2}},
+		},
+		{
+			name: "a count mal counts higher than tmdb is clamped",
+			seasons: []seasonEpisodeCount{
+				{Number: 1, EpisodeCount: 12},
+				{Number: 2, EpisodeCount: 12},
+			},
+			// Bakemonogatari: mal says 15, tmdb season one holds 12.
+			count: 15,
 			want: []episodeRef{
-				{1, 1}, {1, 2}, {2, 1}, {2, 2},
+				{1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 5}, {1, 6},
+				{1, 7}, {1, 8}, {1, 9}, {1, 10}, {1, 11}, {1, 12},
 			},
 		},
 		{
@@ -55,41 +62,25 @@ func TestSpreadEpisodeCountOverSeasons(t *testing.T) {
 				{Number: 1, EpisodeCount: 3},
 			},
 			count: 2,
-			want: []episodeRef{
-				{1, 1}, {1, 2},
-			},
+			want:  []episodeRef{{1, 1}, {1, 2}},
 		},
 		{
-			name: "seasons out of order are still filled in order",
+			name: "seasons out of order still fill the first one",
 			seasons: []seasonEpisodeCount{
 				{Number: 2, EpisodeCount: 2},
 				{Number: 1, EpisodeCount: 2},
 			},
-			count: 3,
-			want: []episodeRef{
-				{1, 1}, {1, 2}, {2, 1},
-			},
+			count: 2,
+			want:  []episodeRef{{1, 1}, {1, 2}},
 		},
 		{
-			name: "seasons with no episodes are stepped over",
+			name: "a season with no episodes is stepped over",
 			seasons: []seasonEpisodeCount{
 				{Number: 1, EpisodeCount: 0},
 				{Number: 2, EpisodeCount: 2},
 			},
 			count: 2,
-			want: []episodeRef{
-				{2, 1}, {2, 2},
-			},
-		},
-		{
-			name: "a count bigger than the show is clamped",
-			seasons: []seasonEpisodeCount{
-				{Number: 1, EpisodeCount: 2},
-			},
-			count: 10,
-			want: []episodeRef{
-				{1, 1}, {1, 2},
-			},
+			want:  []episodeRef{{2, 1}, {2, 2}},
 		},
 		{
 			name:    "a count of zero gives nothing",
@@ -107,13 +98,19 @@ func TestSpreadEpisodeCountOverSeasons(t *testing.T) {
 			name:    "a show we know no seasons for gives nothing",
 			seasons: nil,
 			count:   5,
-			want:    []episodeRef{},
+			want:    nil,
+		},
+		{
+			name:    "a show with only specials gives nothing",
+			seasons: []seasonEpisodeCount{{Number: 0, EpisodeCount: 5}},
+			count:   5,
+			want:    nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := spreadEpisodeCountOverSeasons(tt.seasons, tt.count)
+			got := episodesForCount(tt.seasons, tt.count)
 			if len(got) != len(tt.want) {
 				t.Fatalf("got %d episodes %v, want %d %v",
 					len(got), got, len(tt.want), tt.want)
@@ -126,6 +123,33 @@ func TestSpreadEpisodeCountOverSeasons(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestEpisodesForCountSequelEntry checks the case that made us stop spreading
+// over seasons. MyAnimeList gives a sequel its own entry, and that entry
+// matches the same tmdb show as the original, so its count must not be used
+// to mark episodes of a season it knows nothing about. Clannad is the case we
+// hit: the entry says 23 and "Clannad: After Story" says 24, and the second
+// entry used to leave season two with two episodes marked out of 24.
+func TestEpisodesForCountSequelEntry(t *testing.T) {
+	seasons := []seasonEpisodeCount{
+		{Number: 1, EpisodeCount: 22},
+		{Number: 2, EpisodeCount: 24},
+	}
+
+	for _, count := range []int{23, 24} {
+		got := episodesForCount(seasons, count)
+		for _, e := range got {
+			if e.SeasonNumber != 1 {
+				t.Fatalf("count %d marked s%de%d, want season 1 only",
+					count, e.SeasonNumber, e.EpisodeNumber)
+			}
+		}
+		if len(got) != 22 {
+			t.Errorf("count %d marked %d episodes, want 22 (season one clamped)",
+				count, len(got))
+		}
 	}
 }
 

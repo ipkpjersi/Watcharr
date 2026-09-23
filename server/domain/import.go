@@ -70,8 +70,8 @@ type ImportRequest struct {
 	Tags             []TagAddRequest         `json:"tags"`
 	// How many episodes have been watched, for sources that only give a
 	// total rather than saying which episodes they were (a MyAnimeList
-	// export is the case we have). Spread over the matched shows seasons
-	// when WatchedEpisodes is empty.
+	// export is the case we have). Filled into the first season of the
+	// matched show, clamped to that season, when WatchedEpisodes is empty.
 	WatchedEpisodesCount int `json:"watchedEpisodesCount"`
 }
 
