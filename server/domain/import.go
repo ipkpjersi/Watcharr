@@ -46,6 +46,9 @@ var (
 	// Item already existed, but it had no rating, so the rating from the
 	// import was filled in on the existing entry.
 	IMPORT_RATING_UPDATED ImportResponseType = "IMPORT_RATING_UPDATED"
+	// Item already existed, but it was missing episodes the import knew had
+	// been watched, so they were filled in on the existing entry.
+	IMPORT_EPISODES_UPDATED ImportResponseType = "IMPORT_EPISODES_UPDATED"
 )
 
 type ImportRequest struct {
@@ -65,6 +68,11 @@ type ImportRequest struct {
 	WatchedEpisodes  []entity.WatchedEpisode `json:"watchedEpisodes"`
 	WatchedSeason    []entity.WatchedSeason  `json:"watchedSeasons"`
 	Tags             []TagAddRequest         `json:"tags"`
+	// How many episodes have been watched, for sources that only give a
+	// total rather than saying which episodes they were (a MyAnimeList
+	// export is the case we have). Spread over the matched shows seasons
+	// when WatchedEpisodes is empty.
+	WatchedEpisodesCount int `json:"watchedEpisodesCount"`
 }
 
 // Internal struct given to the SuccessfulImport function.

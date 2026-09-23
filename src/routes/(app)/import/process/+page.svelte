@@ -340,6 +340,18 @@
 							);
 						}
 					}
+					// MyAnimeList only tells us how many episodes have been
+					// watched, not which ones, so the server spreads the count
+					// over the matched shows seasons.
+					const watchedEpisodesNode = animeNode.querySelector(
+						"my_watched_episodes",
+					);
+					if (watchedEpisodesNode?.textContent) {
+						const watchedEpisodes = Number(watchedEpisodesNode.textContent);
+						if (Number.isFinite(watchedEpisodes) && watchedEpisodes > 0) {
+							l.watchedEpisodesCount = watchedEpisodes;
+						}
+					}
 					const typeNode = animeNode.querySelector("series_type");
 					if (typeNode?.textContent) {
 						const malSeriesType = typeNode.textContent?.toLowerCase();
@@ -693,6 +705,8 @@
 													<Icon i="check" wh={22} />
 												{:else if l.state === ImportResponseType.IMPORT_RATING_UPDATED}
 													<Icon i="star" wh={22} />
+												{:else if l.state === ImportResponseType.IMPORT_EPISODES_UPDATED}
+													<Icon i="tv" wh={22} />
 												{/if}
 											</div>
 										</td>
