@@ -261,9 +261,9 @@ func (s *Service) SuccessfulImport(
 		})
 	if err != nil {
 		if errors.Is(err, domain.ErrWatchedExists) {
-			slog.Info("successfulImport: Already on watch list, seeing if a"+
-				" missing rating can be filled in", "error", err)
-			return s.fillInMissingRating(userId, ar, props)
+			slog.Info("successfulImport: Already on watch list, seeing if any"+
+				" missing details can be filled in", "error", err)
+			return s.fillInExistingContent(userId, ar, props)
 		}
 		slog.Error("successfulImport: Failed to add content as watched",
 			"error", err)
@@ -398,6 +398,14 @@ func (s *Service) SuccessfulImport(
 			}
 			w.WatchedEpisodes = ws.WatchedEpisodes
 		}
+	}
+	// Import watched episodes from a count, if that is all the source gave us.
+	// Only used when we weren't given the episodes themselves above.
+	if ar.WatchedEpisodesCount > 0 && len(ar.WatchedEpisodes) <= 0 &&
+		props.ContentType == util.SupportedMediaShow {
+		slog.Debug("successfulImport: Importing watched episodes from a count",
+			"watched_count", ar.WatchedEpisodesCount)
+		s.addEpisodesFromCount(userId, &w, props.TmdbID, ar.WatchedEpisodesCount)
 	}
 	// Import tags, if any
 	if len(ar.Tags) > 0 {

@@ -48,6 +48,9 @@ var (
 	IMPORT_RATING_UPDATED ImportResponseType = "IMPORT_RATING_UPDATED"
 	// User has chosen to skip this name, now and on any future import
 	IMPORT_IGNORED ImportResponseType = "IMPORT_IGNORED"
+	// Item already existed, but it was missing episodes the import knew had
+	// been watched, so they were filled in on the existing entry.
+	IMPORT_EPISODES_UPDATED ImportResponseType = "IMPORT_EPISODES_UPDATED"
 )
 
 type ImportRequest struct {
@@ -77,6 +80,12 @@ type ImportRequest struct {
 	// gives up on matching an entry, which saves an ignored mapping instead
 	// of a match.
 	IgnoreThisItem bool `json:"ignoreThisItem"`
+
+	// How many episodes have been watched, for sources that only give a
+	// total rather than saying which episodes they were (a MyAnimeList
+	// export is the case we have). Spread over the matched shows seasons
+	// when WatchedEpisodes is empty.
+	WatchedEpisodesCount int `json:"watchedEpisodesCount"`
 }
 
 // Internal struct given to the SuccessfulImport function.
