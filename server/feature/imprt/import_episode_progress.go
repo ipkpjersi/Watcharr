@@ -24,65 +24,66 @@ type seasonEpisodeCount struct {
 	EpisodeCount int
 }
 
-// Work out which episodes an absolute watched count covers.
+// Work out which episodes a watched count covers, within one season.
 //
 // Some sources only tell us how many episodes have been watched, not which
 // ones. A MyAnimeList export is the case we have: my_watched_episodes counts
-// from the start of the entry, so the count is spread over the seasons in
-// order. A count of 30 against a show with two 25 episode seasons gives all
-// of season one and the first five episodes of season two.
+// from the start of the entry, and a MyAnimeList entry is a single season,
+// since a sequel gets an entry of its own there.
+//
+// So the count is only ever counted against one season and must not run past
+// the end of it. Carrying a remainder into the next season would be wrong
+// twice over: that season is a different entry with its own count, and the
+// episodes it marked would be the wrong ones.
 //
 // Season 0 is skipped. Specials are not part of the running order the count
 // is counted against, so including them would shift every episode along.
 //
-// A count larger than the show has episodes for is clamped to what the show
-// actually has, which happens when the matched show is not the one the count
-// came from, or when a source counts specials that we skip here.
-func spreadEpisodeCountOverSeasons(
+// The count is clamped to the season's episode count, because MyAnimeList
+// and tmdb do not always agree on how many episodes a season has. Clamping
+// undercounts by the difference, which is better than marking episodes that
+// the count never covered.
+func episodesForCount(
 	seasons []seasonEpisodeCount,
 	count int,
 ) []episodeRef {
 	if count <= 0 {
 		return nil
 	}
-	// Seasons are expected in order, but nothing guarantees tmdb gives them
-	// that way, so order them here rather than trusting the response.
-	ordered := make([]seasonEpisodeCount, 0, len(seasons))
+	// The season the count belongs to, which is the first real one. Nothing
+	// guarantees tmdb gives us the seasons in order, so pick the lowest
+	// numbered rather than trusting the response.
+	var season seasonEpisodeCount
 	for _, v := range seasons {
 		if v.Number <= 0 || v.EpisodeCount <= 0 {
 			continue
 		}
-		ordered = append(ordered, v)
-	}
-	for i := 1; i < len(ordered); i++ {
-		for j := i; j > 0 && ordered[j].Number < ordered[j-1].Number; j-- {
-			ordered[j], ordered[j-1] = ordered[j-1], ordered[j]
+		if season.Number == 0 || v.Number < season.Number {
+			season = v
 		}
 	}
-	eps := []episodeRef{}
-	left := count
-	for _, s := range ordered {
-		if left <= 0 {
-			break
-		}
-		take := s.EpisodeCount
-		if take > left {
-			take = left
-		}
-		for e := 1; e <= take; e++ {
-			eps = append(eps, episodeRef{SeasonNumber: s.Number, EpisodeNumber: e})
-		}
-		left -= take
+	if season.Number == 0 {
+		slog.Warn("episodesForCount: Show has no season we can fill in.",
+			"watched_count", count)
+		return nil
 	}
-	if left > 0 {
-		slog.Warn("spreadEpisodeCountOverSeasons: Show has fewer episodes than"+
-			" the import says were watched, filling in what we can.",
-			"watched_count", count, "not_filled_in", left)
+	take := count
+	if take > season.EpisodeCount {
+		slog.Warn("episodesForCount: Season has fewer episodes than the import"+
+			" says were watched, filling in what we can.",
+			"season", season.Number, "watched_count", count,
+			"season_episodes", season.EpisodeCount,
+			"not_filled_in", count-season.EpisodeCount)
+		take = season.EpisodeCount
+	}
+	eps := make([]episodeRef, 0, take)
+	for e := 1; e <= take; e++ {
+		eps = append(eps, episodeRef{SeasonNumber: season.Number, EpisodeNumber: e})
 	}
 	return eps
 }
 
-// Get the seasons of a show from tmdb, for spreading a watched count over.
+// Get the seasons of a show from tmdb, to fill a watched count into.
 func (s *Service) getShowSeasons(tmdbId int) []seasonEpisodeCount {
 	details, err := s.tmdb.ShowDetails(tmdb.ShowDetailsOptions{
 		ID: strconv.Itoa(tmdbId),
@@ -114,7 +115,7 @@ func (s *Service) addEpisodesFromCount(
 	tmdbId int,
 	count int,
 ) int {
-	eps := spreadEpisodeCountOverSeasons(s.getShowSeasons(tmdbId), count)
+	eps := episodesForCount(s.getShowSeasons(tmdbId), count)
 	if len(eps) <= 0 {
 		slog.Warn("addEpisodesFromCount: Worked out no episodes to add.",
 			"tmdb_id", tmdbId, "watched_count", count)
