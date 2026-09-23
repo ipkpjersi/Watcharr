@@ -598,7 +598,8 @@ export interface ImportedList {
 	/**
 	 * How many episodes have been watched, for sources that only give a total
 	 * rather than saying which episodes they were (a MyAnimeList export is the
-	 * case we have). The server spreads it over the matched shows seasons.
+	 * case we have). The server fills it into the matched shows first season,
+	 * clamped to that season.
 	 */
 	watchedEpisodesCount?: number;
 }

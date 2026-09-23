@@ -346,8 +346,9 @@
 						}
 					}
 					// MyAnimeList only tells us how many episodes have been
-					// watched, not which ones, so the server spreads the count
-					// over the matched shows seasons.
+					// watched, not which ones. A MyAnimeList entry is a single
+					// season, so the server fills the count into the matched
+					// shows first season and clamps it there.
 					const watchedEpisodesNode = animeNode.querySelector(
 						"my_watched_episodes",
 					);
